@@ -36,7 +36,7 @@ def main():
     SecurityDetectorStack(
         app,
         f"AnomalyDetector-{config.environment}",
-        config=config.dict(),
+        config=config.model_dump(),
         enable_training=config.features.enable_training,
         enable_sagemaker=config.features.enable_sagemaker,
         enable_vpc_endpoints=config.features.enable_vpc_endpoints,

@@ -14,11 +14,14 @@ from typing import Any, Dict
 
 import boto3
 from botocore.exceptions import ClientError
+from botocore.client import BaseClient
+from scripts.s3_adapter import S3Adapter
 
 # Add src to path for config access
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from detector.config import is_aws_deploy_allowed, load_config
+from detector.config import load_config
+from src.deployer_guard import require_deploy_allowed_or_exit
 
 
 def create_model_package(
@@ -55,7 +58,9 @@ def upload_to_s3(
     package_path: Path,
     config: Dict[str, Any],
     version: str,
-    dry_run: bool = True
+    dry_run: bool = True,
+    s3_adapter: S3Adapter | None = None,
+    kms_client: BaseClient | None = None,
 ) -> str:
     """Upload model package to S3.
 
@@ -80,33 +85,57 @@ def upload_to_s3(
     print(f"Uploading {package_path} to {s3_uri}")
 
     try:
-        s3_client = boto3.client('s3', region_name=config["aws"]["region"])
+        # Read optional transfer tuning from config: s3.transfer.multipart_threshold and
+        # s3.transfer.transfer_config_kwargs
+        transfer_cfg = config.get("s3", {}).get("transfer", {}) or {}
+        multipart_threshold = transfer_cfg.get("multipart_threshold")
+        transfer_config_kwargs = transfer_cfg.get("transfer_config_kwargs")
+
+        if s3_adapter is None:
+            # Only construct the adapter from config when not injected for tests
+            if multipart_threshold is None and transfer_config_kwargs is None:
+                s3_adapter = S3Adapter(region=config["aws"]["region"])
+            else:
+                s3_adapter = S3Adapter(
+                    region=config["aws"]["region"],
+                    multipart_threshold=multipart_threshold or 8 * 1024 * 1024,
+                    transfer_config_kwargs=transfer_config_kwargs or {}
+                )
+
+        # Resolve KMS alias to key id/arn when performing a real upload. Fail hard
+        # if the alias cannot be resolved to avoid accidental unencrypted uploads.
+        kms_key_identifier = None
+        kms_alias = config.get("kms", {}).get("key_alias")
+        if kms_alias:
+            kms_client = kms_client or boto3.client('kms', region_name=config["aws"]["region"])
+            kms_key_identifier = _resolve_kms_alias_to_keyid(kms_client, kms_alias)
+            if not kms_key_identifier:
+                raise RuntimeError(f"Unable to resolve KMS alias to key id/arn: {kms_alias}")
 
         # Upload the package
-        s3_client.upload_file(
-            str(package_path),
-            bucket_name,
-            key,
-            ExtraArgs={
-                'ServerSideEncryption': 'aws:kms',
-                'SSEKMSKeyId': config["kms"]["key_alias"],
-                'Metadata': {
-                    'version': version,
-                    'environment': environment,
-                    'created_at': datetime.utcnow().isoformat()
-                }
+        extra_args = {
+            'ServerSideEncryption': 'aws:kms',
+            'Metadata': {
+                'version': version,
+                'environment': environment,
+                'created_at': datetime.utcnow().isoformat()
             }
-        )
+        }
+        if kms_key_identifier:
+            extra_args['SSEKMSKeyId'] = kms_key_identifier
+
+        # Use the adapter which will choose multipart upload when needed.
+        s3_adapter.upload_file(package_path, bucket_name, key, extra_args)
 
         # Update current.txt pointer
         current_key = f"model-packages/{environment}/current.txt"
-        s3_client.put_object(
-            Bucket=bucket_name,
-            Key=current_key,
-            Body=package_path.name.encode('utf-8'),
-            ServerSideEncryption='aws:kms',
-            SSEKMSKeyId=config["kms"]["key_alias"]
-        )
+        put_extra = {
+            'ServerSideEncryption': 'aws:kms',
+        }
+        if kms_key_identifier:
+            put_extra['SSEKMSKeyId'] = kms_key_identifier
+
+        s3_adapter.put_object(bucket_name, current_key, package_path.name.encode('utf-8'), extra_args=put_extra)
 
         print("✅ Successfully uploaded and updated current pointer")
         return s3_uri
@@ -138,6 +167,58 @@ def validate_model_artifacts(model_dir: Path) -> None:
         if not file_path.exists():
             raise FileNotFoundError(f"Required model file missing: {required_file}")
         print(f"  ✅ Found: {required_file}")
+
+
+def _resolve_kms_alias_to_keyid(kms_client: BaseClient, alias_name: str) -> str | None:
+    """Resolve a KMS alias (e.g. alias/my-key) to a KeyId or ARN.
+
+    Returns the KeyId/ARN string or None if not found. Uses `list_aliases` and
+    `describe_key` to discover the underlying key ARN.
+    """
+    if not alias_name.startswith("alias/"):
+        # The user provided a direct id or arn already
+        return alias_name
+
+    # We want to fail fast and synchronously if the alias cannot be resolved
+    try:
+        paginator = kms_client.get_paginator('list_aliases')
+        for page in paginator.paginate():
+            for alias in page.get('Aliases', []):
+                if alias.get('AliasName') == alias_name:
+                    target_key = alias.get('TargetKeyId')
+                    if not target_key:
+                        # Alias exists but is not mapped to a key
+                        raise RuntimeError(
+                            f"KMS alias '{alias_name}' found but has no TargetKeyId. "
+                            "Ensure the alias points to an enabled KMS key."
+                        )
+
+                    # TargetKeyId may be a KeyId or ARN. Use describe_key to obtain canonical ARN.
+                    try:
+                        desc = kms_client.describe_key(KeyId=target_key)
+                        arn = desc.get('KeyMetadata', {}).get('Arn')
+                        return arn or target_key
+                    except Exception as e:
+                        raise RuntimeError(
+                            f"Failed to describe KMS key for alias '{alias_name}' (KeyId={target_key}): {e}"
+                        ) from e
+
+        # If we reach here the alias wasn't found - raise a helpful error so callers
+        # performing real uploads fail early rather than silently proceeding.
+        raise RuntimeError(
+            f"KMS alias '{alias_name}' could not be found in this account/region. "
+            "Check that the alias exists and that your AWS credentials/region are correct. "
+            "If you intended to pass a KeyId or ARN, provide it directly instead of an alias."
+        )
+    except RuntimeError:
+        # Re-raise our own runtime errors directly
+        raise
+    except Exception as e:
+        # Wrap other unexpected errors with context to help troubleshooting
+        raise RuntimeError(
+            f"Unexpected error while resolving KMS alias '{alias_name}': {e}. "
+            "Verify network/credentials and try again."
+        ) from e
 
 
 def main():
@@ -181,12 +262,13 @@ def main():
 
     # Safety checks
     dry_run = not args.apply
-    if args.apply and not is_aws_deploy_allowed():
-        print("❌ ALLOW_AWS_DEPLOY=1 required for actual deployments")
-        sys.exit(1)
+    if args.apply:
+        require_deploy_allowed_or_exit("Model upload requested; confirm before proceeding")
 
     # Load configuration
-    config = load_config(args.environment)
+    config_obj = load_config(args.environment)
+    # load_config returns a Pydantic Config object
+    config = config_obj.model_dump()
 
     try:
         # Validate model artifacts
@@ -205,7 +287,7 @@ def main():
         # Upload to S3
         s3_uri = upload_to_s3(
             package_path,
-            config.dict(),
+            config,
             args.version,
             dry_run=dry_run
         )

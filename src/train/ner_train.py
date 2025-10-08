@@ -258,7 +258,7 @@ class NERTrainer:
         for _ in range(1000):
             event = generator.generate_cloudtrail_event()
             synthetic_data.append({
-                "text": json.dumps(event.dict()),
+                "text": json.dumps(event.model_dump()),
                 "entities": self._extract_entities_from_event(event)
             })
         
@@ -278,7 +278,7 @@ class NERTrainer:
     def _extract_entities_from_event(self, event) -> List[Dict[str, Any]]:
         """Extract entity annotations from CloudTrail event."""
         entities = []
-        text = json.dumps(event.dict())
+    text = json.dumps(event.model_dump())
         
         # Extract ARNs
         if hasattr(event, 'userIdentity') and event.userIdentity.arn:

@@ -1,3 +1,126 @@
+"""Anomaly scoring utilities for the anomaly-detector.
+
+This module implements a robust modified-z-score anomaly detector and a
+windowed variant for streaming/time-series inputs. It also provides a tiny
+reconciliation stub that converts anomaly detections to recommended actions.
+
+Contract (functions):
+- modified_z_scores(values: Sequence[float]) -> List[float]
+    Returns the modified z-score for each value (higher absolute => more anomalous).
+- detect_anomalies_mod_z(values, threshold=3.5) -> List[bool]
+    Returns a boolean list where True indicates an anomaly.
+- windowed_modified_z_scores(values, window_size) -> List[float]
+    Returns scores using a rolling window median/MAD.
+- recommend_reconciliation(actions...) -> Dict[str,str]
+    Simple mapping of anomaly indices to recommended actions.
+
+Edge cases handled:
+- Empty inputs return empty lists.
+- Constant inputs (MAD==0) produce zero scores and no anomalies.
+"""
+
+from typing import Iterable, List, Sequence, Dict
+import math
+
+import numpy as np
+
+
+def _median(arr: Sequence[float]) -> float:
+    if len(arr) == 0:
+        return 0.0
+    return float(np.median(np.array(arr, dtype=float)))
+
+
+def modified_z_scores(values: Iterable[float]) -> List[float]:
+    """Compute modified z-scores for a sequence of numeric values.
+
+    Uses the formula: 0.6745 * (x - median) / MAD
+
+    Returns a list of floats (scores). If MAD == 0, scores are 0 to avoid divide-by-zero.
+    """
+    vals = np.array(list(values), dtype=float)
+    if vals.size == 0:
+        return []
+
+    med = float(np.median(vals))
+    mad = float(np.median(np.abs(vals - med)))
+
+    if mad == 0.0 or math.isclose(mad, 0.0):
+        # If MAD is zero (e.g. many repeated values with a single outlier),
+        # fall back to a std-based z-score which can still detect the outlier.
+        std = float(np.std(vals))
+        if std == 0.0 or math.isclose(std, 0.0):
+            return [0.0 for _ in vals]
+        mean = float(np.mean(vals))
+        scores = (vals - mean) / std
+        return [float(abs(s)) for s in scores]
+
+    const = 0.6745
+    scores = const * (vals - med) / mad
+    # return absolute scores (magnitude of anomaly)
+    return [float(abs(s)) for s in scores]
+
+
+def detect_anomalies_mod_z(values: Iterable[float], threshold: float = 3.5) -> List[bool]:
+    """Detect anomalies using modified z-score threshold.
+
+    Returns a list of booleans aligned with input values.
+    """
+    scores = modified_z_scores(values)
+    # Consider values with score equal to threshold as anomalous to avoid
+    # floating-point brittle comparisons when using fallback methods.
+    return [s >= threshold for s in scores]
+
+
+def windowed_modified_z_scores(values: Iterable[float], window_size: int = 5) -> List[float]:
+    """Compute modified z-scores using a rolling window centered on each point.
+
+    For indices where a full window can't be formed, use a smaller available window.
+    """
+    vals = list(values)
+    n = len(vals)
+    if n == 0:
+        return []
+    if window_size < 1:
+        raise ValueError("window_size must be >= 1")
+
+    half = window_size // 2
+    scores: List[float] = []
+
+    for i in range(n):
+        start = max(0, i - half)
+        end = min(n, i + half + 1)
+        window = vals[start:end]
+        # compute modified z for this window, then take score corresponding to center
+        window_scores = modified_z_scores(window)
+        # The center index within window
+        center_idx = i - start
+        scores.append(window_scores[center_idx])
+
+    return scores
+
+
+def recommend_reconciliation(anomaly_flags: Sequence[bool]) -> Dict[int, str]:
+    """Simple reconciliation recommendation.
+
+    For each flagged anomaly index, returns a suggested action string. Minimal stub
+    for tests and to provide a predictable output for downstream workflows.
+    """
+    recs: Dict[int, str] = {}
+    for idx, flag in enumerate(anomaly_flags):
+        if flag:
+            recs[idx] = "investigate_and_tag"
+    return recs
+
+
+def anomalous_indices_with_scores(values: Iterable[float], threshold: float = 3.5):
+    """Return a list of (index, score) for values whose score >= threshold.
+
+    This is useful for downstream enrichment pipelines that want both index
+    and anomaly magnitude.
+    """
+    scores = modified_z_scores(values)
+    return [(i, s) for i, s in enumerate(scores) if s >= threshold]
 """Anomaly Scoring Engine for Security Event Analysis.
 
 This module implements sophisticated anomaly detection algorithms that analyze

@@ -1,3 +1,139 @@
+import os
+from pathlib import Path
+
+import yaml
+import pytest
+from pydantic import ValidationError
+
+from src.detector.config import load_config, is_aws_deploy_allowed
+
+
+CONFIG_DIR = Path.cwd() / "config"
+
+
+def _write_config_file(name: str, data: dict) -> Path:
+    CONFIG_DIR.mkdir(exist_ok=True)
+    p = CONFIG_DIR / name
+    with p.open("w") as f:
+        yaml.safe_dump(data, f)
+    return p
+
+
+def test_load_config_happy_path(tmp_path):
+    data = {
+        "environment": "test",
+        "app_name": "anomaly-detector",
+        "aws": {"region": "us-west-2", "profile": "dev"},
+        "s3": {
+            "model_bucket_name": "models-test",
+            "data_bucket_name": "data-test",
+            "log_bucket_name": "logs-test",
+            "compliance_bucket_name": "compliance-test",
+        },
+        "kms": {"key_alias": "alias/test"},
+        "vpc": {"vpc_id": None, "private_subnets": []},
+        "model": {"ner_model_name": "m", "anomaly_threshold": 1.0, "batch_size": 1},
+        "logging": {"level": "DEBUG", "structured": True},
+        "features": {"enable_training": False, "enable_sagemaker": False, "enable_vpc_endpoints": False},
+        "alerts": {"sns_topic_name": "topic-test", "email_endpoints": []},
+    }
+
+    p = _write_config_file("test.yml", data)
+    try:
+        cfg = load_config("test")
+        assert cfg.environment == "test"
+        assert cfg.aws.region == "us-west-2"
+        assert cfg.s3.model_bucket_name == "models-test"
+        assert cfg.kms.key_alias == "alias/test"
+    finally:
+        p.unlink()
+
+
+def test_env_overrides_apply(monkeypatch):
+    base = {
+        "environment": "test",
+        "app_name": "anomaly-detector",
+        "aws": {"region": "us-west-2", "profile": "dev"},
+        "s3": {
+            "model_bucket_name": "models-test",
+            "data_bucket_name": "data-test",
+            "log_bucket_name": "logs-test",
+            "compliance_bucket_name": "compliance-test",
+        },
+        "kms": {"key_alias": "alias/test"},
+        "vpc": {"vpc_id": None, "private_subnets": []},
+        "model": {"ner_model_name": "m", "anomaly_threshold": 1.0, "batch_size": 1},
+        "logging": {"level": "DEBUG", "structured": True},
+        "features": {"enable_training": False, "enable_sagemaker": False, "enable_vpc_endpoints": False},
+        "alerts": {"sns_topic_name": "topic-test", "email_endpoints": []},
+    }
+
+    p = _write_config_file("test.yml", base)
+    try:
+        # Set overrides
+        monkeypatch.setenv("MODEL_BUCKET_NAME", "env-models")
+        monkeypatch.setenv("COMPLIANCE_BUCKET_NAME", "env-compliance")
+        monkeypatch.setenv("ENABLE_VPC_ENDPOINTS", "true")
+        monkeypatch.setenv("PRIVATE_SUBNETS", "subnet-1, subnet-2")
+        monkeypatch.setenv("ALERT_EMAILS", "a@example.com, b@example.com")
+        monkeypatch.setenv("SNS_TOPIC_NAME", "env-topic")
+        monkeypatch.setenv("AWS_REGION", "eu-central-1")
+
+        cfg = load_config("test")
+        assert cfg.s3.model_bucket_name == "env-models"
+        assert cfg.s3.compliance_bucket_name == "env-compliance"
+        assert cfg.features.enable_vpc_endpoints is True
+        assert cfg.vpc.private_subnets == ["subnet-1", "subnet-2"]
+        assert cfg.alerts.email_endpoints == ["a@example.com", "b@example.com"]
+        assert cfg.alerts.sns_topic_name == "env-topic"
+        assert cfg.aws.region == "eu-central-1"
+    finally:
+        p.unlink()
+
+
+def test_missing_config_file_raises():
+    # ensure file absent
+    p = CONFIG_DIR / "doesnotexist.yml"
+    if p.exists():
+        p.unlink()
+    with pytest.raises(FileNotFoundError):
+        load_config("doesnotexist")
+
+
+def test_validation_error_for_incomplete_config():
+    # write a config missing required S3 fields
+    invalid = {
+        "environment": "test",
+        "app_name": "anomaly-detector",
+        "aws": {"region": "us-west-2"},
+        # s3 is intentionally incomplete
+        "s3": {},
+        "kms": {"key_alias": "alias/test"},
+        "vpc": {"vpc_id": None, "private_subnets": []},
+        "model": {"ner_model_name": "m", "anomaly_threshold": 1.0, "batch_size": 1},
+        "logging": {"level": "DEBUG", "structured": True},
+        "features": {"enable_training": False, "enable_sagemaker": False, "enable_vpc_endpoints": False},
+        "alerts": {"sns_topic_name": "topic-test", "email_endpoints": []},
+    }
+
+    p = _write_config_file("test_invalid.yml", invalid)
+    try:
+        with pytest.raises(ValidationError):
+            load_config("test_invalid")
+    finally:
+        p.unlink()
+
+
+def test_is_aws_deploy_allowed(monkeypatch):
+    # default off
+    monkeypatch.delenv("ALLOW_AWS_DEPLOY", raising=False)
+    assert is_aws_deploy_allowed() is False
+
+    monkeypatch.setenv("ALLOW_AWS_DEPLOY", "1")
+    assert is_aws_deploy_allowed() is True
+
+    monkeypatch.setenv("ALLOW_AWS_DEPLOY", "true")
+    assert is_aws_deploy_allowed() is True
 """Tests for the configuration management system."""
 
 import os

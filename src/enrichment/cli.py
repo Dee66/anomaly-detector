@@ -101,7 +101,8 @@ Examples:
             if args.type == "cloudtrail":
                 event = CloudTrailEvent(**event_data)
                 result = handler.process_cloudtrail_event(event)
-                results.append(result.dict())
+                # process_cloudtrail_event returns a Pydantic model-like object; use model_dump() for Pydantic v2
+                results.append(result.model_dump())
             else:
                 print(f"Error: Log type '{args.type}' not yet implemented", file=sys.stderr)
                 return 1

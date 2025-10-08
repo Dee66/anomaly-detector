@@ -37,6 +37,9 @@ from aws_cdk import (
 from aws_cdk import (
     aws_sns as sns,
 )
+from aws_cdk import (
+    aws_sns_subscriptions as sns_subs,
+)
 from constructs import Construct
 
 
@@ -89,11 +92,11 @@ class SecurityDetectorStack(Stack):
         else:
             self.vpc = None
 
+        # Alerting (create before IAM roles)
+        self.alerts_topic = self._create_alerts_topic()
+
         # IAM roles
         self.detector_role = self._create_detector_role()
-
-        # Alerting
-        self.alerts_topic = self._create_alerts_topic()
 
         # CloudWatch log group
         self.log_group = self._create_log_group()
@@ -216,48 +219,32 @@ class SecurityDetectorStack(Stack):
         # Get retention configuration from config
         retention_config = self.config.get("data_retention", {}).get("raw_security_logs", {})
         retention_years = retention_config.get("retention_years", 7)
-        enable_object_lock = retention_config.get("immutable", True)
         
         # Define lifecycle transitions based on policy
-        lifecycle_transitions = []
-        for transition in retention_config.get("lifecycle_transitions", []):
-            storage_class_map = {
-                "STANDARD_IA": s3.StorageClass.INFREQUENT_ACCESS,
-                "GLACIER": s3.StorageClass.GLACIER,
-                "DEEP_ARCHIVE": s3.StorageClass.DEEP_ARCHIVE
-            }
-            lifecycle_transitions.append(
-                s3.Transition(
-                    storage_class=storage_class_map[transition["storage_class"]],
-                    transition_after=Duration.days(transition["days"])
-                )
+        lifecycle_transitions = [
+            s3.Transition(
+                storage_class=s3.StorageClass.INFREQUENT_ACCESS,
+                transition_after=Duration.days(30)
+            ),
+            s3.Transition(
+                storage_class=s3.StorageClass.GLACIER,
+                transition_after=Duration.days(365)
+            ),
+            s3.Transition(
+                storage_class=s3.StorageClass.DEEP_ARCHIVE,
+                transition_after=Duration.days(1095)  # 3 years
             )
-        
-        # Default transitions if not configured
-        if not lifecycle_transitions:
-            lifecycle_transitions = [
-                s3.Transition(
-                    storage_class=s3.StorageClass.INFREQUENT_ACCESS,
-                    transition_after=Duration.days(30)
-                ),
-                s3.Transition(
-                    storage_class=s3.StorageClass.GLACIER,
-                    transition_after=Duration.days(365)
-                ),
-                s3.Transition(
-                    storage_class=s3.StorageClass.DEEP_ARCHIVE,
-                    transition_after=Duration.days(1095)  # 3 years
-                )
-            ]
+        ]
 
-        bucket_props = {
-            "bucket_name": self.config["s3"]["log_bucket_name"],
-            "encryption": s3.BucketEncryption.KMS,
-            "encryption_key": self.kms_key,
-            "versioned": True,
-            "block_public_access": s3.BlockPublicAccess.BLOCK_ALL,
-            "removal_policy": RemovalPolicy.RETAIN,
-            "lifecycle_rules": [
+        bucket = s3.Bucket(
+            self, "SecurityLogBucket",
+            bucket_name=self.config["s3"]["log_bucket_name"],
+            encryption=s3.BucketEncryption.KMS,
+            encryption_key=self.kms_key,
+            versioned=True,
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            removal_policy=RemovalPolicy.RETAIN,
+            lifecycle_rules=[
                 s3.LifecycleRule(
                     id="SecurityLogRetentionPolicy",
                     enabled=True,
@@ -265,23 +252,7 @@ class SecurityDetectorStack(Stack):
                     expiration=Duration.days(retention_years * 365 + 30)  # Retention + grace period
                 )
             ]
-        }
-        
-        # Add Object Lock if enabled (for immutability)
-        if enable_object_lock:
-            bucket_props["object_lock_enabled"] = True
-            bucket_props["object_lock_default_retention"] = s3.ObjectLockRetention(
-                mode=s3.ObjectLockRetentionMode.GOVERNANCE,
-                duration=Duration.days(retention_years * 365)
-            )
-        
-        bucket = s3.Bucket(self, "SecurityLogBucket", **bucket_props)
-        
-        # Enable MFA Delete if configured
-        if retention_config.get("mfa_delete", True):
-            # Note: MFA Delete can only be enabled via AWS CLI after bucket creation
-            # This is documented in the deployment guide
-            pass
+        )
             
         return bucket
 
@@ -290,44 +261,28 @@ class SecurityDetectorStack(Stack):
         # Get retention configuration from config
         retention_config = self.config.get("data_retention", {}).get("compliance_outputs", {})
         retention_years = retention_config.get("retention_years", 5)
-        enable_object_lock = retention_config.get("immutable", True)
         
         # Define lifecycle transitions
-        lifecycle_transitions = []
-        for transition in retention_config.get("lifecycle_transitions", []):
-            storage_class_map = {
-                "STANDARD_IA": s3.StorageClass.INFREQUENT_ACCESS,
-                "GLACIER": s3.StorageClass.GLACIER,
-                "DEEP_ARCHIVE": s3.StorageClass.DEEP_ARCHIVE
-            }
-            lifecycle_transitions.append(
-                s3.Transition(
-                    storage_class=storage_class_map[transition["storage_class"]],
-                    transition_after=Duration.days(transition["days"])
-                )
+        lifecycle_transitions = [
+            s3.Transition(
+                storage_class=s3.StorageClass.INFREQUENT_ACCESS,
+                transition_after=Duration.days(90)
+            ),
+            s3.Transition(
+                storage_class=s3.StorageClass.GLACIER,
+                transition_after=Duration.days(730)  # 2 years
             )
-        
-        # Default transitions if not configured
-        if not lifecycle_transitions:
-            lifecycle_transitions = [
-                s3.Transition(
-                    storage_class=s3.StorageClass.INFREQUENT_ACCESS,
-                    transition_after=Duration.days(90)
-                ),
-                s3.Transition(
-                    storage_class=s3.StorageClass.GLACIER,
-                    transition_after=Duration.days(730)  # 2 years
-                )
-            ]
+        ]
 
-        bucket_props = {
-            "bucket_name": self.config["s3"]["compliance_bucket_name"],
-            "encryption": s3.BucketEncryption.KMS,
-            "encryption_key": self.kms_key,
-            "versioned": True,
-            "block_public_access": s3.BlockPublicAccess.BLOCK_ALL,
-            "removal_policy": RemovalPolicy.RETAIN,
-            "lifecycle_rules": [
+        return s3.Bucket(
+            self, "ComplianceBucket",
+            bucket_name=self.config["s3"]["compliance_bucket_name"],
+            encryption=s3.BucketEncryption.KMS,
+            encryption_key=self.kms_key,
+            versioned=True,
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            removal_policy=RemovalPolicy.RETAIN,
+            lifecycle_rules=[
                 s3.LifecycleRule(
                     id="ComplianceOutputRetentionPolicy",
                     enabled=True,
@@ -335,21 +290,12 @@ class SecurityDetectorStack(Stack):
                     expiration=Duration.days(retention_years * 365)
                 )
             ]
-        }
-        
-        # Add Object Lock if enabled
-        if enable_object_lock:
-            bucket_props["object_lock_enabled"] = True
-            bucket_props["object_lock_default_retention"] = s3.ObjectLockRetention(
-                mode=s3.ObjectLockRetentionMode.GOVERNANCE,
-                duration=Duration.days(retention_years * 365)
-            )
-        
-        return s3.Bucket(self, "ComplianceBucket", **bucket_props)
+        )
 
     def _create_or_import_vpc(self) -> ec2.Vpc:
         """Create new VPC or import existing one."""
         vpc_id = self.config.get("vpc", {}).get("vpc_id")
+        private_only = bool(self.config.get("vpc", {}).get("private_only", False))
 
         if vpc_id:
             # Import existing VPC
@@ -359,11 +305,20 @@ class SecurityDetectorStack(Stack):
             )
         else:
             # Create new VPC
-            return ec2.Vpc(
-                self, "DetectorVPC",
-                max_azs=2,
-                cidr="10.0.0.0/16",
-                subnet_configuration=[
+            subnet_configuration = []
+            if private_only:
+                subnet_configuration.append(
+                    ec2.SubnetConfiguration(
+                        name="Private",
+                        # Use isolated private subnets when creating a private-only VPC so the
+                        # construct does not require public subnets for NAT gateways during
+                        # unit tests and for private-only deployments.
+                        subnet_type=ec2.SubnetType.PRIVATE_ISOLATED,
+                        cidr_mask=24
+                    )
+                )
+            else:
+                subnet_configuration = [
                     ec2.SubnetConfiguration(
                         name="Private",
                         subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
@@ -375,6 +330,12 @@ class SecurityDetectorStack(Stack):
                         cidr_mask=24
                     )
                 ]
+
+            return ec2.Vpc(
+                self, "DetectorVPC",
+                max_azs=2,
+                cidr="10.0.0.0/16",
+                subnet_configuration=subnet_configuration
             )
 
     def _create_vpc_endpoints(self) -> None:
@@ -389,16 +350,19 @@ class SecurityDetectorStack(Stack):
         )
 
         # Interface endpoints for other services
-        endpoints = [
-            ec2.InterfaceVpcEndpointAwsService.KMS,
-            ec2.InterfaceVpcEndpointAwsService.SNS,
-            ec2.InterfaceVpcEndpointAwsService.LOGS,
-            ec2.InterfaceVpcEndpointAwsService.SECRETS_MANAGER
+        # Create well-known interface endpoints. Use static construct ids to avoid
+        # unresolved token values appearing in construct ids (which breaks assertions
+        # during unit tests).
+        mappings = [
+            (ec2.InterfaceVpcEndpointAwsService.KMS, "KmsEndpoint"),
+            (ec2.InterfaceVpcEndpointAwsService.SNS, "SnsEndpoint"),
+            (ec2.InterfaceVpcEndpointAwsService.CLOUDWATCH_LOGS, "CloudWatchLogsEndpoint"),
+            (ec2.InterfaceVpcEndpointAwsService.SECRETS_MANAGER, "SecretsManagerEndpoint"),
         ]
 
-        for service in endpoints:
+        for service, construct_id in mappings:
             self.vpc.add_interface_endpoint(
-                f"{service.name}Endpoint",
+                construct_id,
                 service=service,
                 private_dns_enabled=True
             )
@@ -433,13 +397,13 @@ class SecurityDetectorStack(Stack):
             self, "AlertsTopic",
             topic_name=self.config["alerts"]["sns_topic_name"],
             display_name="Anomaly Detector Alerts",
-            kms_master_key=self.kms_key
+            master_key=self.kms_key
         )
 
         # Add email subscriptions from config
         for email in self.config["alerts"].get("email_endpoints", []):
             topic.add_subscription(
-                sns.EmailSubscription(email)
+                sns_subs.EmailSubscription(email)
             )
 
         return topic

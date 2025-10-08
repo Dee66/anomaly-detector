@@ -25,6 +25,7 @@ class S3Config(BaseModel):
     model_bucket_name: str
     data_bucket_name: str
     log_bucket_name: str
+    compliance_bucket_name: str
 
 
 class KMSConfig(BaseModel):
@@ -125,6 +126,9 @@ def _apply_env_overrides(config_data: Dict[str, Any]) -> Dict[str, Any]:
         config_data.setdefault("s3", {})["data_bucket_name"] = os.getenv("DATA_BUCKET_NAME")
     if os.getenv("LOG_BUCKET_NAME"):
         config_data.setdefault("s3", {})["log_bucket_name"] = os.getenv("LOG_BUCKET_NAME")
+    # Compliance bucket override (optional)
+    if os.getenv("COMPLIANCE_BUCKET_NAME"):
+        config_data.setdefault("s3", {})["compliance_bucket_name"] = os.getenv("COMPLIANCE_BUCKET_NAME")
 
     # KMS overrides
     if os.getenv("KMS_KEY_ALIAS"):
@@ -146,6 +150,27 @@ def _apply_env_overrides(config_data: Dict[str, Any]) -> Dict[str, Any]:
         config_data.setdefault("features", {})["enable_sagemaker"] = (
             enable_sagemaker.lower() == "true"
         )
+    enable_vpc_endpoints = os.getenv("ENABLE_VPC_ENDPOINTS")
+    if enable_vpc_endpoints:
+        config_data.setdefault("features", {})["enable_vpc_endpoints"] = (
+            enable_vpc_endpoints.lower() == "true"
+        )
+
+    # VPC overrides: private_subnets can be provided as a comma-separated env var
+    private_subnets = os.getenv("PRIVATE_SUBNETS")
+    if private_subnets:
+        # split, strip and ignore empty entries
+        subs = [s.strip() for s in private_subnets.split(",") if s.strip()]
+        config_data.setdefault("vpc", {})["private_subnets"] = subs
+
+    # Alerts overrides
+    if os.getenv("SNS_TOPIC_NAME"):
+        config_data.setdefault("alerts", {})["sns_topic_name"] = os.getenv("SNS_TOPIC_NAME")
+    alert_emails = os.getenv("ALERT_EMAILS")
+    if alert_emails:
+        # comma-separated list of emails
+        emails = [e.strip() for e in alert_emails.split(",") if e.strip()]
+        config_data.setdefault("alerts", {})["email_endpoints"] = emails
 
     return config_data
 

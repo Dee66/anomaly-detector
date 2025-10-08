@@ -15,6 +15,7 @@ from typing import Any, Dict
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from detector.config import is_aws_deploy_allowed, load_config
+from deployer_guard import require_deploy_allowed_or_exit
 
 
 def run_command(cmd: list, dry_run: bool = True, check: bool = True) -> subprocess.CompletedProcess:
@@ -198,9 +199,11 @@ def main():
 
     # Safety checks
     dry_run = not args.apply
-    if args.apply and not is_aws_deploy_allowed():
-        print("❌ ALLOW_AWS_DEPLOY=1 required for actual deployments")
-        sys.exit(1)
+    if args.apply:
+        # Require stricter confirmation before allowing real deployments
+        require_deploy_allowed_or_exit(
+            "Deployment requested. Confirm by setting DEPLOY_CONFIRM=I_ACCEPT_COSTS"
+        )
 
     # Load configuration
     config = load_config(args.environment)
@@ -210,11 +213,11 @@ def main():
         print(f"🔒 Mode: {'APPLY' if not dry_run else 'DRY-RUN'}")
 
         # Validate prerequisites
-        validate_prerequisites(config.dict())
+        validate_prerequisites(config.model_dump())
 
         # Check budget guardrails (unless skipped)
         if not args.skip_budget_check:
-            check_budget_guardrails(config.dict(), dry_run=dry_run)
+            check_budget_guardrails(config.model_dump(), dry_run=dry_run)
 
         # CDK synthesis
         cdk_synth(args.environment, dry_run=dry_run)

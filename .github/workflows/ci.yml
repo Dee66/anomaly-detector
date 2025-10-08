@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+          poetry config virtualenvs.create false
+          poetry install --no-interaction --no-ansi
+      - name: Run tests
+        run: |
+          python -m pytest -q
+
+  cdk-synth:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install CDK and dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry aws-cdk-lib constructs aws-cdk.core
+          poetry config virtualenvs.create false
+          poetry install --no-interaction --no-ansi
+      - name: Dry-run synth
+        env:
+          ENVIRONMENT: dev
+        run: |
+          # Ensure ALLOW_AWS_DEPLOY not set in CI - synth only
+          # Use the CDK CLI to synth the app so Template assertions map to cfn
+          npx -y aws-cdk@2 cdk synth -a "python infra/app.py" --no-staging || python -m infra.app

@@ -13,6 +13,14 @@ s3:
   data_bucket_name: anomaly-detector-data-dev
   log_bucket_name: anomaly-detector-logs-dev
   compliance_bucket_name: anomaly-detector-compliance-dev
+  # S3 transfer tuning (optional)
+  # - multipart_threshold: bytes above which multipart uploads are used
+  # - transfer_config_kwargs: forwarded to boto3.s3.transfer.TransferConfig
+  transfer:
+    multipart_threshold: 8388608  # 8 MiB
+    transfer_config_kwargs:
+      max_concurrency: 5
+      multipart_chunksize: 8388608
 
 # Data Retention & Immutability Policies (shorter for dev)
 data_retention:

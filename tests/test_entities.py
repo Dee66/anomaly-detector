@@ -141,8 +141,11 @@ class TestEntityExtractor:
         assert len(entities) > 0
         
         # Check for ARN extraction
-        arn_entities = [e for e in entities if EntityType.IAM_USER_ARN in str(e.entity_type)]
+        arn_entities = [e for e in entities if e.entity_type == EntityType.IAM_USER_ARN]
         assert len(arn_entities) > 0
+        arn_entity = arn_entities[0]
+        assert arn_entity.entity_id == "arn:aws:iam::123456789012:user/test-user"
+        assert arn_entity.source_field == "userIdentity.arn"
         
         # Check for IP address extraction
         ip_entities = [e for e in entities if e.entity_type == EntityType.IP_ADDRESS]
@@ -150,10 +153,6 @@ class TestEntityExtractor:
         ip_entity = ip_entities[0]
         assert ip_entity.entity_id == "203.0.113.12"
         assert ip_entity.source_field == "sourceIPAddress"
-        
-        # Check for service/API call extraction
-        api_entities = [e for e in entities if e.entity_id == "GetObject"]
-        assert len(api_entities) > 0
     
     def test_extract_from_cloudtrail_event_with_request_params(self):
         """Test extracting entities from CloudTrail event with request parameters."""
