@@ -1,0 +1,148 @@
+# Security Detector Training Configuration
+
+# Model Configuration
+model:
+  type: "both"  # Options: "ner", "anomaly", "both"
+  base_model: "distilbert-base-uncased"  # HuggingFace model name
+  num_labels: 9  # B-USER, I-USER, B-ROLE, I-ROLE, B-RESOURCE, I-RESOURCE, B-IP, I-IP, O
+  max_length: 512
+  
+  # Model variants for different use cases
+  alternatives:
+    - name: "roberta-base"
+      description: "Better performance, higher memory usage"
+    - name: "albert-base-v2"
+      description: "Smaller model size, good for edge deployment"
+
+# Training Configuration
+training:
+  epochs: 10
+  batch_size: 16
+  learning_rate: 2e-5
+  weight_decay: 0.01
+  warmup_steps: 500
+  gradient_accumulation_steps: 1
+  early_stopping_patience: 3
+  save_steps: 500
+  eval_steps: 500
+  logging_steps: 100
+  
+  # Anomaly-specific thresholds
+  anomaly_threshold: 5.0
+  statistical_threshold: 2.5
+  
+  # Quality gates
+  min_f1_score: 0.85  # Minimum F1 score for NER model
+  max_false_positive_rate: 0.05  # Maximum false positive rate for anomaly detection
+
+# Data Configuration
+data:
+  train_split: 0.8
+  val_split: 0.1
+  test_split: 0.1
+  max_samples: null  # Set to limit dataset size for testing
+  
+  # Data augmentation
+  augmentation:
+    enabled: false
+    techniques:
+      - "synonym_replacement"
+      - "random_insertion"
+      - "back_translation"
+    augmentation_ratio: 0.1
+
+  # Data paths
+  paths:
+    train_data: "data/train"
+    synthetic_data: "data/synthetic"
+    validation_data: "data/validation"
+
+# Optimization Configuration
+optimization:
+  mixed_precision: true
+  gradient_checkpointing: false
+  dataloader_num_workers: 4
+  pin_memory: true
+  
+  # Advanced optimization
+  optimizer: "adamw"  # Options: "adamw", "sgd", "adafactor"
+  scheduler: "linear_warmup"  # Options: "linear_warmup", "cosine", "constant"
+  
+  # Memory optimization
+  max_grad_norm: 1.0
+  accumulate_grad_batches: 1
+
+# Monitoring Configuration
+monitoring:
+  wandb_enabled: false
+  wandb_project: "security-anomaly-detection"
+  wandb_entity: null  # Set your wandb entity/team name
+  
+  cloudwatch_enabled: true
+  metrics_namespace: "SecurityDetector/Training"
+  
+  # Metrics to track
+  track_metrics:
+    - "loss"
+    - "f1_score"
+    - "precision"
+    - "recall"
+    - "accuracy"
+    - "anomaly_detection_rate"
+    - "false_positive_rate"
+  
+  # Alerting thresholds
+  alerts:
+    high_loss_threshold: 2.0
+    low_f1_threshold: 0.7
+    high_memory_usage_threshold: 0.9
+
+# Output Configuration
+output:
+  model_dir: "models"
+  metrics_dir: "metrics"
+  logs_dir: "logs"
+  
+  # Model export formats
+  export_formats:
+    - "pytorch"
+    - "onnx"
+    - "torchscript"
+  
+  # Artifact management
+  artifacts:
+    save_best_only: true
+    save_optimizer_state: false
+    compress_artifacts: true
+
+# Environment Configuration
+environment:
+  # AWS configuration
+  aws:
+    region: "us-east-1"
+    s3_bucket: "security-detector-artifacts"
+    s3_prefix: "models"
+  
+  # Compute resources
+  compute:
+    max_memory_gb: 16
+    max_gpu_memory_gb: 8
+    distributed_training: false
+    
+  # Reproducibility
+  random_seed: 42
+  deterministic: true
+
+# Security Configuration
+security:
+  # Data privacy
+  anonymize_logs: true
+  encrypt_artifacts: true
+  
+  # Access control
+  require_authentication: true
+  allowed_users: []  # List of allowed users for training
+  
+  # Compliance
+  audit_logging: true
+  retention_days: 90

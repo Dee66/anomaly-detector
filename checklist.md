@@ -1,6 +1,6 @@
 # Access Anomaly Detector - Delivery Checklist
 
-<div align="left" style="margin:1rem 0;"> <strong>Status:</strong> <span>35% complete (26/75 items)</span> <div style="display:flex; align-items:center; gap:0.75rem; margin-top:0.35rem;"> <div style="flex:1; height:14px; background:#1f2933; border-radius:999px; overflow-hidden;"> <div style="width:35%; height:100%; background:linear-gradient(90deg, #10b981, #22d3ee);"></div> </div> <code style="background:#0f172a; color:#ecfeff; padding:0.1rem 0.55rem; border-radius:999px; font-weight:600;">35%</code> </div> </div>
+<div align="left" style="margin:1rem 0;"> <strong>Status:</strong> <span>64% complete (36/56 items)</span> <div style="display:flex; align-items:center; gap:0.75rem; margin-top:0.35rem;"> <div style="flex:1; height:14px; background:#1f2933; border-radius:999px; overflow-hidden;"> <div style="width:64%; height:100%; background:linear-gradient(90deg, #10b981, #22d3ee);"></div> </div> <code style="background:#0f172a; color:#ecfeff; padding:0.1rem 0.55rem; border-radius:999px; font-weight:600;">64%</code> </div> </div>
 
 ## 1. Environment & Tooling 🛠️
 - ✅ Confirm Python 3.11 toolchain installed locally
@@ -36,11 +36,12 @@
 - ✅ Ensure bucket names and retention windows are parameterizable via the global config loader.
 
 ## 4. NER Model Development & Training 🏷️
-- [ ] Implement src/train/ner_train.py for fine-tuning a small language model for entity extraction.
-- [ ] Implement data preparation for NER tagging and sequence labeling.
-- [ ] Define and implement the Anomaly Scoring logic (statistical deviation, rare entity combos).
-- [ ] Capture training metrics (F1-score for NER, precision/recall for anomaly) to JSON/CloudWatch.
-- [ ] Notebook placeholders: 01-Entity-Labeling, 02-Anomaly-Profiling.
+- ✅ Implement src/train/ner_train.py for fine-tuning a small language model for entity extraction.
+- ✅ Implement data preparation for NER tagging and sequence labeling.
+- ✅ Define and implement the Anomaly Scoring logic (statistical deviation, rare entity combos).
+- ✅ Implement model training script (e.g., `train.py`) accepting hyperparams & config.
+- ✅ Capture training metrics (F1-score for NER, precision/recall for anomaly) to JSON/CloudWatch.
+- ✅ Notebook placeholders: 01-Entity-Labeling, 02-Anomaly-Profiling.
 
 **Practical additions:**
 - [ ] Add packaging scripts that upload model artifacts to S3 in a predictable layout: `s3://<bucket>/model-packages/<env>/model_package-<ts>.zip` and expose `current.txt` alias management.
@@ -48,7 +49,7 @@
 
 ## 5. Testing & Quality Gates ✅
 - ✅ Unit tests for entity extraction accuracy and labeling consistency.
-- [ ] Unit tests for Anomaly Scoring calculation.
+- ✅ Unit tests for Anomaly Scoring calculation.
 - [ ] Integration test stub for the full log ingestion → scoring flow.
 - ✅ Configure pytest + coverage thresholds.
 - [ ] Define quality gate: NER F1-score ≥ Baseline for CI pass.
