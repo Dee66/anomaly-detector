@@ -1,6 +1,6 @@
 # Access Anomaly Detector - Delivery Checklist
 
-<div align="left" style="margin:1rem 0;"> <strong>Status:</strong> <span>25% complete (19/75 items)</span> <div style="display:flex; align-items:center; gap:0.75rem; margin-top:0.35rem;"> <div style="flex:1; height:14px; background:#1f2933; border-radius:999px; overflow-hidden;"> <div style="width:25%; height:100%; background:linear-gradient(90deg, #10b981, #22d3ee);"></div> </div> <code style="background:#0f172a; color:#ecfeff; padding:0.1rem 0.55rem; border-radius:999px; font-weight:600;">25%</code> </div> </div>
+<div align="left" style="margin:1rem 0;"> <strong>Status:</strong> <span>35% complete (26/75 items)</span> <div style="display:flex; align-items:center; gap:0.75rem; margin-top:0.35rem;"> <div style="flex:1; height:14px; background:#1f2933; border-radius:999px; overflow-hidden;"> <div style="width:35%; height:100%; background:linear-gradient(90deg, #10b981, #22d3ee);"></div> </div> <code style="background:#0f172a; color:#ecfeff; padding:0.1rem 0.55rem; border-radius:999px; font-weight:600;">35%</code> </div> </div>
 
 ## 1. Environment & Tooling 🛠️
 - ✅ Confirm Python 3.11 toolchain installed locally
@@ -13,16 +13,14 @@
 - ✅ Add a `config/` folder with per-environment YAMLs (e.g., `dev.yml`, `prod.yml`) and a single source-of-truth config loader at `src/detector/config.py`.
 - ✅ Make CLI/deploy scripts default to dry-run and require an explicit opt-in (`--apply` or `ALLOW_AWS_DEPLOY=1`) to prevent accidental AWS changes.
 ### 🛠️ Environment & Tooling
-- [x] **Docker configuration** (multi-stage builds for prod/dev)
-- [x] **Poetry configuration** (pyproject.toml with all deps and scripts)
-- [x] **Poetry/local .venv usage and reproducible dev setup** (`poetry install`, `activate .venv`)
-- [x] **Nox testing sessions** (cross-platform test automation)
+- ✅ **Docker configuration** (multi-stage builds for prod/dev)
+- ✅ **Poetry configuration** (pyproject.toml with all deps and scripts)
+- ✅ **Poetry/local .venv usage and reproducible dev setup** (`poetry install`, `activate .venv`)
+- ✅ **Nox testing sessions** (cross-platform test automation)
 
 ## 2. Project Scaffolding 🧱
 - ✅ Finalize repo structure (infra/, src/detector/, src/enrichment/, data/, tests/)
 - ✅ Populate README detailing the Security & Compliance Automation objective.
-
-**Practical additions from implementation experience:**
 - ✅ Add a top-level `config/` with example `dev.yml` and `prod.yml` templates and a README explaining fields required by `src/detector/config.py`.
 - ✅ Include a `scripts/package_model_artifacts.py` and a `scripts/deploy_detector.py` that are dry-run by default and accept an `--apply` switch.
 
@@ -31,11 +29,11 @@
 - ✅ Define target entities (IAM Role ARNs, IP Addresses, VPC IDs, KMS Key IDs) for NER training.
 - ✅ Implement synthetic log generator (data/generate_logs.py) for reproducible training/testing.
 - ✅ Define final compliance output schema (entity_id, entity_type, risk_score, log_id).
-- [ ] Outline data retention and immutability policies for raw security logs.
+- ✅ Outline data retention and immutability policies for raw security logs.
 
 **Implementation notes:**
-- [ ] Apply S3 lifecycle policies for raw log buckets (infrequent access, glacier transition, long-term expiration) as part of infra.
-- [ ] Ensure bucket names and retention windows are parameterizable via the global config loader.
+- ✅ Apply S3 lifecycle policies for raw log buckets (infrequent access, glacier transition, long-term expiration) as part of infra.
+- ✅ Ensure bucket names and retention windows are parameterizable via the global config loader.
 
 ## 4. NER Model Development & Training 🏷️
 - [ ] Implement src/train/ner_train.py for fine-tuning a small language model for entity extraction.
@@ -64,11 +62,11 @@
 **Current Status**: 85 tests passing, 85% code coverage achieved with comprehensive schema validation, log generator testing, entity extraction, and S3/local ingestion pipeline.
 
 ## 6. Real-Time Enrichment Handler 🚨
-- [ ] Define inference service API contract for log enrichment.
-- [ ] Implement src/inference/enrichment_handler.py (log parsing, NER tagging, anomaly scoring).
+- ✅ Define inference service API contract for log enrichment.
+- ✅ Implement src/enrichment/enrichment_handler.py (log parsing, NER tagging, anomaly scoring).
 - [ ] Ensure KMS encryption and secure loading for all model artifacts.
-- [ ] Add structured logging for audit trail traceability.
-- [ ] Package inference code for secure containerization (e.g., Fargate/Lambda inside a private VPC).
+- ✅ Add structured logging for audit trail traceability.
+- ✅ Package inference code for secure containerization (e.g., Fargate/Lambda inside a private VPC).
 
 **Operational additions:**
 - [ ] Add audit persistence for actionable recommendations (DynamoDB audit table) and a nightly reconciler Lambda that checks whether recommended actions were implemented.

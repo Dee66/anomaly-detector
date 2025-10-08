@@ -12,6 +12,39 @@ s3:
   model_bucket_name: anomaly-detector-models-prod
   data_bucket_name: anomaly-detector-data-prod
   log_bucket_name: anomaly-detector-logs-prod
+  compliance_bucket_name: anomaly-detector-compliance-prod
+
+# Data Retention & Immutability Policies
+data_retention:
+  raw_security_logs:
+    retention_years: 7
+    immutable: true
+    mfa_delete: true
+    lifecycle_transitions:
+      - days: 30
+        storage_class: "STANDARD_IA"
+      - days: 365
+        storage_class: "GLACIER"
+      - days: 1095  # 3 years
+        storage_class: "DEEP_ARCHIVE"
+    
+  compliance_outputs:
+    retention_years: 5
+    immutable: true
+    lifecycle_transitions:
+      - days: 90
+        storage_class: "STANDARD_IA"
+      - days: 730  # 2 years
+        storage_class: "GLACIER"
+  
+  model_artifacts:
+    retention_years: 3
+    immutable: false  # Allow model updates
+    lifecycle_transitions:
+      - days: 30
+        storage_class: "STANDARD_IA"
+      - days: 90
+        storage_class: "GLACIER"
 
 # KMS Configuration
 kms:
