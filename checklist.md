@@ -85,7 +85,8 @@
 - [ ] Define deployment using private subnets and VPC Endpoints only.
 - [ ] Define service configuration (Fargate/Lambda) with required least-privilege IAM.
 - [ ] Tag every resource (App, Env, CostCenter) for audit and FinOps.
-- ✅ Add CloudWatch alarms for invocation errors and log volume anomalies.
+ - ✅ Add CloudWatch alarms for invocation errors and log volume anomalies.
+	 - ✅ Wire alarm actions to `alerts.sns_topic_name` (SNS publish)
 
 **CDK notes & best-practices from Resource Forecaster:**
 - [ ] Parameterize infra via the central config (allow passing `model_bucket_name`, `data_bucket_name`, and `vpc_id` into the stack constructor).

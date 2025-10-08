@@ -35,6 +35,9 @@ from aws_cdk import (
     aws_cloudwatch as cloudwatch,
 )
 from aws_cdk import (
+    aws_cloudwatch_actions as cloudwatch_actions,
+)
+from aws_cdk import (
     aws_s3 as s3,
 )
 from aws_cdk import (
@@ -456,7 +459,7 @@ class SecurityDetectorStack(Stack):
             statistic="Sum"
         )
 
-        cloudwatch.Alarm(
+        alarm = cloudwatch.Alarm(
             self, "ErrorAlarm",
             metric=alarm_metric,
             threshold=1,
@@ -464,6 +467,14 @@ class SecurityDetectorStack(Stack):
             alarm_description="Alarm when logs contain ERROR entries",
             treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING
         )
+
+        # If an alerts SNS topic exists in the stack config, publish alarm actions to it
+        try:
+            if getattr(self, "alerts_topic", None):
+                alarm.add_alarm_action(cloudwatch_actions.SnsAction(self.alerts_topic))
+        except Exception:
+            # Don't fail synth if action wiring can't be applied in some contexts
+            pass
 
     def _create_sagemaker_resources(self) -> None:
         """Create SageMaker inference resources (conditionally)."""

@@ -30,3 +30,12 @@ def test_error_metric_filter_and_alarm_present():
     # CloudWatch Alarm resource should be present
     alarms = template.find_resources("AWS::CloudWatch::Alarm")
     assert len(alarms) >= 1
+    # Ensure at least one alarm contains an AlarmActions property (SNS action)
+    found_action = False
+    for _, a in alarms.items():
+        props = a.get("Properties", {})
+        if props.get("AlarmActions"):
+            found_action = True
+            break
+
+    assert found_action
