@@ -216,26 +216,28 @@ class EntityExtractor:
         """
         entities = []
         
-        # Full ARN
-        arn_entities = self.extract_from_text(arn, [EntityType.IAM_ROLE_ARN])
-        for entity in arn_entities:
-            entity.source_field = source_field
-            entity.confidence = min(0.95, entity.confidence + 0.1)  # Boost confidence
-        entities.extend(arn_entities)
-        
-        # Parse ARN components
-        arn_parts = arn.split(':')
-        if len(arn_parts) >= 6:
-            account_id = arn_parts[4]
-            if self._is_valid_account_id(account_id):
-                entity = ExtractedEntity(
-                    entity_type=EntityType.IAM_ROLE_ARN,
-                    entity_id=account_id,
-                    confidence=0.9,
-                    context=f"ARN Account ID: {account_id}",
-                    source_field=f"{source_field}.account_id"
-                )
-                entities.append(entity)
+        # Determine ARN type and extract accordingly
+        if ":user/" in arn:
+            # IAM User ARN
+            user_entities = self.extract_from_text(arn, [EntityType.IAM_USER_ARN])
+            for entity in user_entities:
+                entity.source_field = source_field
+                entity.confidence = min(0.95, entity.confidence + 0.1)  # Boost confidence
+            entities.extend(user_entities)
+        elif ":role/" in arn or ":assumed-role/" in arn:
+            # IAM Role ARN
+            role_entities = self.extract_from_text(arn, [EntityType.IAM_ROLE_ARN])
+            for entity in role_entities:
+                entity.source_field = source_field
+                entity.confidence = min(0.95, entity.confidence + 0.1)  # Boost confidence
+            entities.extend(role_entities)
+        else:
+            # Generic ARN - try both types
+            arn_entities = self.extract_from_text(arn, [EntityType.IAM_ROLE_ARN, EntityType.IAM_USER_ARN])
+            for entity in arn_entities:
+                entity.source_field = source_field
+                entity.confidence = min(0.95, entity.confidence + 0.1)  # Boost confidence
+            entities.extend(arn_entities)
         
         return entities
     
@@ -251,26 +253,12 @@ class EntityExtractor:
         """
         entities = []
         
-        # Map common prefixes to services
-        service_prefixes = {
-            'Get', 'Put', 'Delete', 'Create', 'Update', 'List', 'Describe',
-            'Run', 'Stop', 'Start', 'Terminate', 'Attach', 'Detach'
-        }
+        # For now, we don't extract API call names as entities since we don't have
+        # a dedicated entity type for them. This prevents false positives where
+        # event names like "GetObject" get classified as IP addresses.
+        # Future: Add API_CALL or AWS_SERVICE entity type if needed.
         
-        # Look for service indicators in event name
-        for prefix in service_prefixes:
-            if event_name.startswith(prefix):
-                # This is a valid AWS API call
-                entity = ExtractedEntity(
-                    entity_type=EntityType.IP_ADDRESS,  # Using as proxy for "API_CALL"
-                    entity_id=event_name,
-                    confidence=0.8,
-                    context=f"AWS API Call: {event_name}",
-                    source_field=source_field
-                )
-                entities.append(entity)
-                break
-        
+        logger.debug(f"Skipping service extraction for event: {event_name}")
         return entities
     
     def _calculate_confidence(self, entity_type: EntityType, entity_id: str, 

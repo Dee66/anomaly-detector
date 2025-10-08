@@ -1,29 +1,33 @@
 # Access Anomaly Detector - Delivery Checklist
 
-<div align="left" style="margin:1rem 0;"> <strong>Status:</strong> <span>17% complete (13/75 items)</span> <div style="display:flex; align-items:center; gap:0.75rem; margin-top:0.35rem;"> <div style="flex:1; height:14px; background:#1f2933; border-radius:999px; overflow-hidden;"> <div style="width:17%; height:100%; background:linear-gradient(90deg, #10b981, #22d3ee);"></div> </div> <code style="background:#0f172a; color:#ecfeff; padding:0.1rem 0.55rem; border-radius:999px; font-weight:600;">17%</code> </div> </div>
+<div align="left" style="margin:1rem 0;"> <strong>Status:</strong> <span>25% complete (19/75 items)</span> <div style="display:flex; align-items:center; gap:0.75rem; margin-top:0.35rem;"> <div style="flex:1; height:14px; background:#1f2933; border-radius:999px; overflow-hidden;"> <div style="width:25%; height:100%; background:linear-gradient(90deg, #10b981, #22d3ee);"></div> </div> <code style="background:#0f172a; color:#ecfeff; padding:0.1rem 0.55rem; border-radius:999px; font-weight:600;">25%</code> </div> </div>
 
 ## 1. Environment & Tooling 🛠️
 - ✅ Confirm Python 3.11 toolchain installed locally
 - ✅ Initialize Poetry project with NLP/NER specific dependencies (e.g., spaCy, Hugging Face)
 - ✅ Define default Nox sessions (lint, tests, format, e2e_security, package)
-- [ ] Document AWS CLI v2.27.50 requirement and restricted IAM profile setup.
-- [ ] Document mandatory usage of AWS Secrets Manager for all model/endpoint credentials.
+- ✅ Document AWS CLI v2.27.50 requirement and restricted IAM profile setup.
+- ✅ Document mandatory usage of AWS Secrets Manager for all model/endpoint credentials.
 
 **Recommended additions & learnings from Resource Forecaster:**
 - ✅ Add a `config/` folder with per-environment YAMLs (e.g., `dev.yml`, `prod.yml`) and a single source-of-truth config loader at `src/detector/config.py`.
 - ✅ Make CLI/deploy scripts default to dry-run and require an explicit opt-in (`--apply` or `ALLOW_AWS_DEPLOY=1`) to prevent accidental AWS changes.
-- [ ] Document Poetry/local `.venv` usage and reproducible dev setup (poetry install, activate .venv).
+### 🛠️ Environment & Tooling
+- [x] **Docker configuration** (multi-stage builds for prod/dev)
+- [x] **Poetry configuration** (pyproject.toml with all deps and scripts)
+- [x] **Poetry/local .venv usage and reproducible dev setup** (`poetry install`, `activate .venv`)
+- [x] **Nox testing sessions** (cross-platform test automation)
 
 ## 2. Project Scaffolding 🧱
 - ✅ Finalize repo structure (infra/, src/detector/, src/enrichment/, data/, tests/)
-- [ ] Populate README detailing the Security & Compliance Automation objective.
+- ✅ Populate README detailing the Security & Compliance Automation objective.
 
 **Practical additions from implementation experience:**
 - ✅ Add a top-level `config/` with example `dev.yml` and `prod.yml` templates and a README explaining fields required by `src/detector/config.py`.
 - ✅ Include a `scripts/package_model_artifacts.py` and a `scripts/deploy_detector.py` that are dry-run by default and accept an `--apply` switch.
 
 ## 3. Security Log Ingestion & Tagging 🗄️
-- [ ] Define input sources (e.g., CloudTrail/VPC Flow Logs) and ingestion contract (EventBridge/SQS).
+- ✅ Define input sources (e.g., CloudTrail/VPC Flow Logs) and ingestion contract (EventBridge/SQS).
 - ✅ Define target entities (IAM Role ARNs, IP Addresses, VPC IDs, KMS Key IDs) for NER training.
 - ✅ Implement synthetic log generator (data/generate_logs.py) for reproducible training/testing.
 - ✅ Define final compliance output schema (entity_id, entity_type, risk_score, log_id).
@@ -45,7 +49,7 @@
 - [ ] Provide a local inference container template (`scripts/detector_inference.py`) for packaging inside Fargate/Lambda/SageMaker.
 
 ## 5. Testing & Quality Gates ✅
-- [ ] Unit tests for entity extraction accuracy and labeling consistency.
+- ✅ Unit tests for entity extraction accuracy and labeling consistency.
 - [ ] Unit tests for Anomaly Scoring calculation.
 - [ ] Integration test stub for the full log ingestion → scoring flow.
 - ✅ Configure pytest + coverage thresholds.
@@ -57,7 +61,7 @@
 - [ ] Ensure CLI and deploy scripts run in-process during tests (so monkeypatching/stubbing works) rather than via subprocess when possible.
 - [ ] Add tests for dry-run behavior (no AWS calls by default) and an `apply` test mode that uses Stubber to simulate AWS responses.
 
-**Current Status**: 48 tests passing, 96% code coverage achieved with comprehensive schema validation and log generator testing.
+**Current Status**: 85 tests passing, 85% code coverage achieved with comprehensive schema validation, log generator testing, entity extraction, and S3/local ingestion pipeline.
 
 ## 6. Real-Time Enrichment Handler 🚨
 - [ ] Define inference service API contract for log enrichment.
