@@ -1,0 +1,49 @@
+# Production environment configuration
+environment: prod
+app_name: anomaly-detector
+
+# AWS Configuration
+aws:
+  region: us-east-1
+  profile: prod-profile
+  
+# S3 Configuration
+s3:
+  model_bucket_name: anomaly-detector-models-prod
+  data_bucket_name: anomaly-detector-data-prod
+  log_bucket_name: anomaly-detector-logs-prod
+
+# KMS Configuration
+kms:
+  key_alias: alias/anomaly-detector-prod
+  
+# VPC Configuration (required for prod)
+vpc:
+  vpc_id: vpc-12345678  # Existing VPC ID
+  private_subnets: 
+    - subnet-12345678
+    - subnet-87654321
+  
+# Model Configuration
+model:
+  ner_model_name: "distilbert-base-uncased"
+  anomaly_threshold: 2.5
+  batch_size: 64
+  
+# Logging
+logging:
+  level: INFO
+  structured: true
+  
+# Feature Flags
+features:
+  enable_training: false  # Training in dedicated environment
+  enable_sagemaker: true
+  enable_vpc_endpoints: true
+  
+# Alerts
+alerts:
+  sns_topic_name: anomaly-detector-alerts-prod
+  email_endpoints:
+    - security-team@company.com
+    - ops-team@company.com

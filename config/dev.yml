@@ -1,0 +1,45 @@
+# Development environment configuration
+environment: dev
+app_name: anomaly-detector
+
+# AWS Configuration
+aws:
+  region: us-west-2
+  profile: dev-profile
+  
+# S3 Configuration
+s3:
+  model_bucket_name: anomaly-detector-models-dev
+  data_bucket_name: anomaly-detector-data-dev
+  log_bucket_name: anomaly-detector-logs-dev
+
+# KMS Configuration
+kms:
+  key_alias: alias/anomaly-detector-dev
+  
+# VPC Configuration (optional for dev)
+vpc:
+  vpc_id: null  # Will create new VPC if null
+  private_subnets: []
+  
+# Model Configuration
+model:
+  ner_model_name: "distilbert-base-uncased"
+  anomaly_threshold: 3.0
+  batch_size: 32
+  
+# Logging
+logging:
+  level: DEBUG
+  structured: true
+  
+# Feature Flags
+features:
+  enable_training: true
+  enable_sagemaker: false
+  enable_vpc_endpoints: false
+  
+# Alerts
+alerts:
+  sns_topic_name: anomaly-detector-alerts-dev
+  email_endpoints: []

@@ -1,0 +1,46 @@
+[tool.poetry]
+name = "anomaly-detector"
+version = "0.1.0"
+description = "Security log anomaly detector with NER-based entity extraction"
+authors = ["Dee <dee@example.com>"]
+packages = [
+    {include = "anomalydetector"},
+    {include = "detector", from = "src"}
+]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pandas = "^2.2.1"
+numpy = "^1.26.0"
+scikit-learn = "^1.3.2"
+# Core dependencies first
+pyyaml = "^6.0.1"
+pydantic = "^2.5.0"
+click = "^8.1.7"
+# Testing AWS
+boto3-stubs = "^1.34.0"
+moto = "^4.2.0"
+types-awscrt = "^0.27.0"
+aws-lambda-powertools = "^2.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
+pytest-cov = "^4.1.0"
+black = "^23.11.0"
+ruff = "^0.1.0"
+mypy = "^1.7.0"
+nox = "^2023.4.22"
+aws-lambda-powertools = ">=2.0.0"
+types-awscrt = ">=0.27.0"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "C", "I"]
+ignore = ["E402"]  # Allow imports after path manipulation
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
