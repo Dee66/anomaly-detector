@@ -1,6 +1,6 @@
  # Access Anomaly Detector - Delivery Checklist
 
-<div align="left" style="margin:1rem 0;"> <strong>Status:</strong> <span>73% complete (41/56 items)</span> <div style="display:flex; align-items:center; gap:0.75rem; margin-top:0.35rem;"> <div style="flex:1; height:14px; background:#1f2933; border-radius:999px; overflow:hidden;"> <div style="width:73%; height:100%; background:linear-gradient(90deg, #10b981, #22d3ee);"></div> </div> <code style="background:#0f172a; color:#ecfeff; padding:0.1rem 0.55rem; border-radius:999px; font-weight:600;">73%</code> </div> </div>
+<div align="left" style="margin:1rem 0;"> <strong>Status:</strong> <span>75% complete (42/56 items)</span> <div style="display:flex; align-items:center; gap:0.75rem; margin-top:0.35rem;"> <div style="flex:1; height:14px; background:#1f2933; border-radius:999px; overflow:hidden;"> <div style="width:75%; height:100%; background:linear-gradient(90deg, #10b981, #22d3ee);"></div> </div> <code style="background:#0f172a; color:#ecfeff; padding:0.1rem 0.55rem; border-radius:999px; font-weight:600;">75%</code> </div> </div>
 
 ## 1. Environment & Tooling 🛠️
 - ✅ Confirm Python 3.11 toolchain installed locally
@@ -85,7 +85,7 @@
 - [ ] Define deployment using private subnets and VPC Endpoints only.
 - [ ] Define service configuration (Fargate/Lambda) with required least-privilege IAM.
 - [ ] Tag every resource (App, Env, CostCenter) for audit and FinOps.
-- [ ] Add CloudWatch alarms for invocation errors and log volume anomalies.
+- ✅ Add CloudWatch alarms for invocation errors and log volume anomalies.
 
 **CDK notes & best-practices from Resource Forecaster:**
 - [ ] Parameterize infra via the central config (allow passing `model_bucket_name`, `data_bucket_name`, and `vpc_id` into the stack constructor).

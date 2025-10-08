@@ -32,6 +32,9 @@ from aws_cdk import (
     aws_logs as logs,
 )
 from aws_cdk import (
+    aws_cloudwatch as cloudwatch,
+)
+from aws_cdk import (
     aws_s3 as s3,
 )
 from aws_cdk import (
@@ -100,6 +103,9 @@ class SecurityDetectorStack(Stack):
 
         # CloudWatch log group
         self.log_group = self._create_log_group()
+
+        # Create an error metric and alarm for the log group
+        self._create_error_metric_and_alarm()
 
         # Optional training resources (gated by CloudFormation condition)
         if enable_training:
@@ -423,6 +429,41 @@ class SecurityDetectorStack(Stack):
         # This would include SageMaker training jobs, data processing, etc.
         # For now, just a placeholder
         pass
+
+    def _create_error_metric_and_alarm(self) -> None:
+        """Create a MetricFilter that counts ERROR occurrences and a CloudWatch Alarm."""
+        if not self.log_group:
+            return
+
+        metric_namespace = f"{self.config.get('app_name', 'anomaly-detector')}/Logs"
+        metric_name = "ErrorCount"
+
+        # Create a Metric Filter to count lines containing the literal "ERROR"
+        logs.MetricFilter(
+            self, "ErrorMetricFilter",
+            log_group=self.log_group,
+            metric_namespace=metric_namespace,
+            metric_name=metric_name,
+            filter_pattern=logs.FilterPattern.literal("ERROR"),
+            metric_value="1"
+        )
+
+        # Create a CloudWatch Alarm that fires when ErrorCount >= 1 in a single 1-minute period
+        alarm_metric = cloudwatch.Metric(
+            namespace=metric_namespace,
+            metric_name=metric_name,
+            period=Duration.minutes(1),
+            statistic="Sum"
+        )
+
+        cloudwatch.Alarm(
+            self, "ErrorAlarm",
+            metric=alarm_metric,
+            threshold=1,
+            evaluation_periods=1,
+            alarm_description="Alarm when logs contain ERROR entries",
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING
+        )
 
     def _create_sagemaker_resources(self) -> None:
         """Create SageMaker inference resources (conditionally)."""
