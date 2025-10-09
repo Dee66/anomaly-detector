@@ -1,6 +1,6 @@
  # Access Anomaly Detector - Delivery Checklist
 
- <div align="left" style="margin:1rem 0;"> <strong>Status:</strong> <span>93% complete (52/56 items)</span> <div style="display:flex; align-items:center; gap:0.75rem; margin-top:0.35rem;"> <div style="flex:1; height:14px; background:#1f2933; border-radius:999px; overflow:hidden;"> <div style="width:93%; height:100%; background:linear-gradient(90deg, #10b981, #22d3ee);"></div> </div> <code style="background:#0f172a; color:#ecfeff; padding:0.1rem 0.55rem; border-radius:999px; font-weight:600;">93%</code> </div> </div>
+<div align="left" style="margin:1rem 0;"> <strong>Status:</strong> <span>95% complete (53/56 items)</span> <div style="display:flex; align-items:center; gap:0.75rem; margin-top:0.35rem;"> <div style="flex:1; height:14px; background:#1f2933; border-radius:999px; overflow:hidden;"> <div style="width:95%; height:100%; background:linear-gradient(90deg, #10b981, #22d3ee);"></div> </div> <code style="background:#0f172a; color:#ecfeff; padding:0.1rem 0.55rem; border-radius:999px; font-weight:600;">95%</code> </div> </div>
 
 ## 1. Environment & Tooling 🛠️
 - ✅ Confirm Python 3.11 toolchain installed locally
@@ -11,7 +11,6 @@
 
 **Recommended additions & learnings from Resource Forecaster:**
 - ✅ Add a `config/` folder with per-environment YAMLs (e.g., `dev.yml`, `prod.yml`) and a single source-of-truth config loader at `src/detector/config.py`.
- - ✅ Add a `config/` folder with per-environment YAMLs (e.g., `dev.yml`, `prod.yml`) and a single source-of-truth config loader at `anomalydetector/config.py`.
 - ✅ Make CLI/deploy scripts default to dry-run and require an explicit opt-in (`--apply` or `ALLOW_AWS_DEPLOY=1`) to prevent accidental AWS changes.
 - ✅ Deployment guard added: double-confirmation required for real deploys (both `ALLOW_AWS_DEPLOY=1` and `DEPLOY_CONFIRM=I_ACCEPT_COSTS`).
 
@@ -51,14 +50,13 @@
 - ✅ Provide a local inference container template (`scripts/detector_inference.py`) for packaging inside Fargate/Lambda/SageMaker.
 
 ## 5. Testing & Quality Gates ✅
-**Current Status**: 200 tests passing, comprehensive test coverage achieved with validated anomaly scoring, schema validation, log generator testing, entity extraction, S3/local ingestion pipeline, and real-time enrichment handlers. Deployment guard (double-confirmation) and additional unit tests added; CI workflow created.
+**Current Status**: 204 tests passing, comprehensive test coverage achieved with validated anomaly scoring, schema validation, log generator testing, entity extraction, S3/local ingestion pipeline, and real-time enrichment handlers. Deployment guard (double-confirmation) and additional unit tests added; CI workflow created.
 
 **Testing patterns learned from Resource Forecaster:**
  - ✅ Make KMS alias resolution fail fast with helpful remediation text (`scripts/package_model_artifacts.py`).
 - ✅ Ensure CLI and deploy scripts run in-process during tests (so monkeypatching/stubbing works) rather than via subprocess when possible.
 - ✅ Add tests for dry-run behavior (no AWS calls by default) and an `apply` test mode that uses Stubber to simulate AWS responses.
  - ✅ Add a Flask test-client smoke test for the local inference endpoint and include it in CI.
- - ✅ Add unit tests that verify packaging enforces CMK usage and positive path for explicit KMS ARNs.
  - ✅ Add unit tests that verify packaging enforces CMK usage and positive path for explicit KMS ARNs.
  - ✅ Add CDK infra unit tests for private-only VPC enforcement and audit DynamoDB table presence/condition.
 
@@ -77,12 +75,12 @@
  - ✅ Add audit persistence for actionable recommendations (DynamoDB audit table) and a nightly reconciler Lambda that checks whether recommended actions were implemented.
 - ✅ Emit CloudWatch custom metrics (e.g., `AnomalyRate`, `ReconciliationMissingCount`) and create alarms that can trigger retrain/workflow Lambdas.
 
--# 7. Infrastructure (CDK) 🏗️
+## 7. Infrastructure (CDK) 🏗️
 - ✅ Flesh out `infra/security_detector_stack.py` (VPC resources, IAM roles, KMS keys).
 - ✅ Parameterize infra via the central config (allow passing `model_bucket_name`, `data_bucket_name`, and `vpc_id` into the stack constructor).
  - [~] Define deployment using private subnets and VPC Endpoints only. (In progress — stack constructor supports enforced private-only VPCs via `enforce_private_deployment` flag.)
 - ✅ Define service configuration (Fargate/Lambda) with required least-privilege IAM.
-- [ ] Tag every resource (App, Env, CostCenter) for audit and FinOps.
+- ✅ Tag every resource (App, Env, CostCenter) for audit and FinOps.
  - ✅ Add CloudWatch alarms for invocation errors and log volume anomalies.
 	 - ✅ Wire alarm actions to `alerts.sns_topic_name` (SNS publish)
 
@@ -148,7 +146,8 @@
 - [ ] Prepare demo script + talking points emphasizing Compliance Automation and Data Security.
 - [ ] Add FAQ section (KMS usage, VPC flow, event latency, False Positive strategy).
 - [ ] Capture lessons learned / future enhancements section.
--## Supplement - Lessons & recommendations from implementing resource-forecaster
+
+**Supplement - Lessons & recommendations from implementing resource-forecaster**
 
 The Resource Forecaster project produced a number of practical learnings that are directly applicable when building the `anomaly-detector` plugin. Below is a compact, prioritized set of recommendations, anti-patterns to avoid, and starter tasks you can pick up immediately.
 
