@@ -170,14 +170,83 @@ def check_budget_guardrails(config: Dict[str, Any], dry_run: bool = True) -> Non
         config: Configuration dictionary
         dry_run: If True, just print what would be checked
     """
-    print("💰 Checking budget guardrails...")
+    print("💰 Checking budget guardrails (PaS)...")
 
-    if dry_run:
-        print("DRY RUN: Would check estimated costs against budget limits")
-        print("DRY RUN: Would validate resource quotas and limits")
-    else:
-        # TODO: Implement actual budget checks
-        print("  ⚠️  Budget checks not yet implemented")
+    # Determine budget threshold: config override or environment or default
+    budget = None
+    # Parse budget threshold from config or environment, default to $100/mo
+    budget = None
+    try:
+        bm = config.get("budget_monthly")
+        if bm is not None:
+            budget = float(bm)
+    except Exception:
+        budget = None
+
+    if budget is None:
+        import os
+        try:
+            budget = float(os.getenv("BUDGET_THRESHOLD", "100.0"))
+        except Exception:
+            budget = 100.0
+
+    print(f"  ➤ Budget threshold (monthly estimate): ${budget:.2f}")
+
+    # If dry_run, just estimate and print; otherwise enforce
+    try:
+        # Instantiate the CDK stack in-process to inspect resources
+        from aws_cdk import App, assertions
+        from infra.security_detector_stack import SecurityDetectorStack
+
+        app = App()
+        # Mirror feature flags if present to capture optional resources in estimate
+        stack = SecurityDetectorStack(app, "BudgetEstimateStack", config=config)
+        template = assertions.Template.from_stack(stack).to_json()
+
+        # Heuristic per-resource monthly costs (very conservative/sample values)
+        cost_map = {
+            "AWS::S3::Bucket": 1.0,           # per bucket baseline
+            "AWS::KMS::Key": 3.0,            # per CMK
+            "AWS::Lambda::Function": 5.0,    # per function baseline
+            "AWS::DynamoDB::Table": 20.0,    # on-demand table baseline
+            "AWS::SNS::Topic": 1.0,          # topic baseline
+            "AWS::EC2::NatGateway": 90.0,    # NAT gateway (expensive)
+            "AWS::EC2::VPCEndpoint": 10.0,   # per endpoint
+            "AWS::SageMaker::Model": 500.0,  # heavy resource placeholder
+        }
+
+        # Count resources
+        resources = template.get("Resources", {})
+        estimate = 0.0
+        counts = {}
+        for name, res in resources.items():
+            rtype = res.get("Type")
+            counts[rtype] = counts.get(rtype, 0) + 1
+
+        for rtype, count in counts.items():
+            estimate += cost_map.get(rtype, 0.0) * count
+
+        print("  ➤ Resource counts:")
+        for rtype, count in sorted(counts.items()):
+            print(f"    - {rtype}: {count}")
+
+        print(f"  ➤ Estimated monthly cost (heuristic): ${estimate:.2f}")
+
+        if estimate > budget:
+            msg = f"Estimated monthly cost ${estimate:.2f} exceeds budget ${budget:.2f}"
+            if dry_run:
+                print(f"WARNING: {msg} (dry-run)")
+            else:
+                raise RuntimeError(msg)
+        else:
+            print("  ✅ Estimated cost within budget")
+
+    except Exception as e:
+        # If anything goes wrong during estimation, fail closed when not dry-run
+        if dry_run:
+            print(f"DRY RUN: Budget estimation failed: {e}")
+        else:
+            raise
 
     print("✅ Budget guardrails check complete")
 

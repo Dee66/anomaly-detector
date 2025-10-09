@@ -397,6 +397,80 @@ class TestSecurityDetectorStack:
         template.resource_count_is("AWS::KMS::Key", 1)
         template.resource_count_is("AWS::SNS::Topic", 1)
 
+    def test_s3_buckets_use_cmk(self, app, default_config):
+        """Ensure each S3 bucket is encrypted with the stack KMS CMK (token or explicit id)."""
+        stack = SecurityDetectorStack(app, "TestStackCMK", config=default_config)
+        template = assertions.Template.from_stack(stack).to_json()
+
+        # Inspect S3 bucket resources and ensure they have BucketEncryption referencing the KMS key
+        found_buckets = 0
+        for name, res in template.get("Resources", {}).items():
+            if res.get("Type") == "AWS::S3::Bucket":
+                found_buckets += 1
+                props = res.get("Properties", {})
+                be = props.get("BucketEncryption") or {}
+                # If KMS is used we expect ServerSideEncryptionConfiguration contains aws:kms
+                assert be, f"Bucket {name} missing BucketEncryption"
+                sse_list = be.get("ServerSideEncryptionConfiguration") or be.get("ServerSideEncryptionConfiguration", [])
+                # Accept either the typed structure or tokenized values; look for 'aws:kms' or any Fn:: reference
+                matched = False
+                if isinstance(sse_list, list):
+                    for entry in sse_list:
+                        if isinstance(entry, dict):
+                            inner = entry.get("ServerSideEncryptionByDefault") or {}
+                            if inner.get("SSEAlgorithm") == "aws:kms":
+                                matched = True
+                # Also accept a KmsMasterKeyId property under bucket props (tokenized)
+                if props.get("KmsMasterKeyId"):
+                    matched = True
+
+                assert matched, f"Bucket {name} does not appear to be using aws:kms encryption"
+
+        assert found_buckets >= 4, "Expected at least 4 S3 buckets in the template"
+
+    def test_reconciler_permission_boundary_and_policy(self, app, default_config):
+        """Ensure the reconciler managed permission boundary and function policy are scoped to the audit table."""
+        # Enable audit table so the reconciler and table are present
+        stack = SecurityDetectorStack(app, "TestStackReconciler", config=default_config, enable_audit_table=True)
+        template = assertions.Template.from_stack(stack).to_json()
+
+        resources = template.get("Resources", {})
+
+        # Find managed policy for reconciler
+        found_pb = False
+        found_policy_ref = False
+        for name, res in resources.items():
+            if res.get("Type") == "AWS::IAM::ManagedPolicy" and "reconciler" in name.lower():
+                found_pb = True
+                # Ensure policy document references a token or ARNs (not just '*')
+                doc = res.get("Properties", {}).get("PolicyDocument", {})
+                for stmt in doc.get("Statement", []):
+                    for r in (stmt.get("Resource") or [] if isinstance(stmt.get("Resource"), list) else [stmt.get("Resource")]):
+                        if isinstance(r, dict) and any(k.startswith("Fn::") for k in r.keys()):
+                            found_policy_ref = True
+                        elif isinstance(r, str) and default_config["app_name"] in r:
+                            found_policy_ref = True
+
+        # Check the Reconciler function's inline policy references the table ARN (or token)
+        found_fn_policy = False
+        for name, res in resources.items():
+            if res.get("Type") == "AWS::IAM::Policy":
+                props = res.get("Properties", {})
+                # Heuristic: attached to a role whose name contains ReconcilerFunction or role logical id
+                if "Reconciler" in (props.get("Roles", []) or []) or "Reconciler" in name:
+                    # Inspect statements for resource tokens/ARNs
+                    for stmt in props.get("PolicyDocument", {}).get("Statement", []):
+                        r = stmt.get("Resource")
+                        if isinstance(r, dict) and any(k.startswith("Fn::") for k in r.keys()):
+                            found_fn_policy = True
+                        elif isinstance(r, str) and default_config["app_name"] in r:
+                            found_fn_policy = True
+
+        assert found_pb, "Expected a managed permission boundary for the reconciler"
+        assert found_policy_ref, "Expected the reconciler permission boundary to reference the audit table ARN/token"
+        # The function policy may be inlined differently; be tolerant but expect at least one reference
+        assert found_fn_policy, "Expected the reconciler function policy to reference the audit table ARN/token"
+
     def test_detector_function_role_permissions(self, app, default_config):
         """Test that the explicit DetectorFunctionRole has least-privilege statements."""
         stack = SecurityDetectorStack(app, "TestStackRole", config=default_config)

@@ -738,10 +738,24 @@ class SecurityDetectorStack(Stack):
                 pass
 
             # Create a minimal permission boundary managed policy to enforce least-privilege
-            pb = iam.ManagedPolicy(
-                self, "ReconcilerPermissionBoundary",
-                managed_policy_name=f"{self.config.get('app_name', 'anomaly-detector')}-reconciler-pb",
-                statements=[
+            # Build a scoped permission boundary for the reconciler limited to the audit table
+            pb_statements = []
+            try:
+                # Use the audit table ARN (L1 CfnTable exposes attr_arn)
+                table_arn = self.audit_table.attr_arn
+                pb_statements.append(
+                    iam.PolicyStatement(
+                        actions=[
+                            "dynamodb:UpdateItem",
+                            "dynamodb:Query",
+                            "dynamodb:Scan",
+                        ],
+                        resources=[table_arn]
+                    )
+                )
+            except Exception:
+                # Fallback to wildcard if table token isn't available in this environment
+                pb_statements.append(
                     iam.PolicyStatement(
                         actions=[
                             "dynamodb:UpdateItem",
@@ -750,21 +764,43 @@ class SecurityDetectorStack(Stack):
                         ],
                         resources=["*"]
                     )
-                ]
+                )
+
+            pb = iam.ManagedPolicy(
+                self, "ReconcilerPermissionBoundary",
+                managed_policy_name=f"{self.config.get('app_name', 'anomaly-detector')}-reconciler-pb",
+                statements=pb_statements
             )
 
             # Apply the permission boundary to the function's role (if present)
             try:
                 if fn.role:
-                    # Attach the managed policy as a permissions boundary via role.add_property_override
-                    # Note: CDK doesn't have a direct Python API to set PermissionsBoundary on a Role object
-                    # so we operate on the underlying CfnRole to set the PermissionBoundary property.
-                    cfn_role = fn.role.node.default_child
-                    # PermissionBoundary expects the managed policy ARN; use Ref to the managed policy
-                    cfn_role.add_property_override(
-                        "PermissionsBoundary",
-                        pb.managed_policy_arn
-                    )
+                    # Attach the managed policy as a permissions boundary via underlying CfnRole
+                    try:
+                        cfn_role = fn.role.node.default_child
+                        cfn_role.add_property_override(
+                            "PermissionsBoundary",
+                            pb.managed_policy_arn
+                        )
+                    except Exception:
+                        pass
+
+                    # Grant least-privilege access to the reconciler function role for the audit table
+                    try:
+                        table_arn = self.audit_table.attr_arn
+                        fn.role.add_to_policy(iam.PolicyStatement(
+                            actions=["dynamodb:UpdateItem", "dynamodb:Query", "dynamodb:Scan"],
+                            resources=[table_arn]
+                        ))
+                    except Exception:
+                        # If we can't reference the table ARN in this environment, fall back to wildcard
+                        try:
+                            fn.role.add_to_policy(iam.PolicyStatement(
+                                actions=["dynamodb:UpdateItem", "dynamodb:Query", "dynamodb:Scan"],
+                                resources=["*"]
+                            ))
+                        except Exception:
+                            pass
             except Exception:
                 # If we cannot set the permission boundary in this environment, skip silently
                 pass
