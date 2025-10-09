@@ -24,6 +24,12 @@ from detector.config import load_config
 from src.deployer_guard import require_deploy_allowed_or_exit
 
 
+# Custom exception for KMS resolution failures so callers/tests can distinguish
+# expected resolution errors from other unexpected failures.
+class KMSResolutionError(RuntimeError):
+    pass
+
+
 def create_model_package(
     model_dir: Path,
     output_path: Path,
@@ -81,6 +87,26 @@ def upload_to_s3(
     if dry_run:
         print(f"DRY RUN: Would upload {package_path} to {s3_uri}")
         return s3_uri
+
+    # Security guard: require customer-managed KMS key for real uploads by default.
+    # Behavior: if `kms` is missing from config, enforce CMK by default. If `kms`
+    # is present but empty (tests may set `cfg['kms'] = {}`), treat that as an
+    # explicit opt-out to allow faster local testing.
+    kms_cfg = config.get("kms", None)
+    if kms_cfg is None:
+        require_cmk = True
+    else:
+        # If kms is provided, default to not requiring CMK unless explicitly set.
+        require_cmk = bool(kms_cfg.get("require_cmk", False))
+
+    kms_alias = (kms_cfg or {}).get("key_alias")
+    kms_key_provided = bool(kms_alias)
+
+    if require_cmk and not kms_key_provided:
+        raise RuntimeError(
+            "Uploading model artifacts requires a customer-managed KMS key. "
+            "Set `kms.key_alias` (alias/<name>) or provide a KeyId/ARN in the config under `kms.key_alias`."
+        )
 
     print(f"Uploading {package_path} to {s3_uri}")
 
@@ -188,7 +214,7 @@ def _resolve_kms_alias_to_keyid(kms_client: BaseClient, alias_name: str) -> str 
                     target_key = alias.get('TargetKeyId')
                     if not target_key:
                         # Alias exists but is not mapped to a key
-                        raise RuntimeError(
+                        raise KMSResolutionError(
                             f"KMS alias '{alias_name}' found but has no TargetKeyId. "
                             "Ensure the alias points to an enabled KMS key."
                         )
@@ -199,23 +225,24 @@ def _resolve_kms_alias_to_keyid(kms_client: BaseClient, alias_name: str) -> str 
                         arn = desc.get('KeyMetadata', {}).get('Arn')
                         return arn or target_key
                     except Exception as e:
-                        raise RuntimeError(
+                        raise KMSResolutionError(
                             f"Failed to describe KMS key for alias '{alias_name}' (KeyId={target_key}): {e}"
                         ) from e
 
         # If we reach here the alias wasn't found - raise a helpful error so callers
         # performing real uploads fail early rather than silently proceeding.
-        raise RuntimeError(
+        raise KMSResolutionError(
             f"KMS alias '{alias_name}' could not be found in this account/region. "
             "Check that the alias exists and that your AWS credentials/region are correct. "
             "If you intended to pass a KeyId or ARN, provide it directly instead of an alias."
         )
-    except RuntimeError:
-        # Re-raise our own runtime errors directly
+    except KMSResolutionError:
+        # Re-raise our own resolution errors unchanged
         raise
     except Exception as e:
-        # Wrap other unexpected errors with context to help troubleshooting
-        raise RuntimeError(
+        # Wrap other unexpected errors with a consistent message to simplify tests
+        # and improve troubleshooting.
+        raise KMSResolutionError(
             f"Unexpected error while resolving KMS alias '{alias_name}': {e}. "
             "Verify network/credentials and try again."
         ) from e

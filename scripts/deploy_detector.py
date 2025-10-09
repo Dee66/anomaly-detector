@@ -17,6 +17,19 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from detector.config import is_aws_deploy_allowed, load_config
 from deployer_guard import require_deploy_allowed_or_exit
 
+# Import packaging helpers so deploy flow can package artifacts before deploy
+try:
+    from scripts.package_model_artifacts import (
+        validate_model_artifacts,
+        create_model_package,
+        upload_to_s3,
+    )
+except Exception:
+    # If packaging helpers can't be imported (test stubs), we'll raise at runtime when used
+    validate_model_artifacts = None
+    create_model_package = None
+    upload_to_s3 = None
+
 
 def run_command(cmd: list, dry_run: bool = True, check: bool = True) -> subprocess.CompletedProcess:
     """Run a command with optional dry-run mode.
@@ -194,6 +207,22 @@ def main():
         action="store_true",
         help="Only synthesize templates, don't deploy"
     )
+    parser.add_argument(
+        "--package-model",
+        action="store_true",
+        help="Package model artifacts and upload before deployment (dry-run by default)"
+    )
+    parser.add_argument(
+        "--model-dir",
+        type=Path,
+        default=Path("./model"),
+        help="Directory containing model artifacts to package (default: ./model)"
+    )
+    parser.add_argument(
+        "--version",
+        default=None,
+        help="Version string for the model package (default: timestamp from packager)"
+    )
 
     args = parser.parse_args()
 
@@ -214,6 +243,28 @@ def main():
 
         # Validate prerequisites
         validate_prerequisites(config.model_dump())
+
+        # Optional packaging step: create and upload model artifacts before deploy
+        if args.package_model:
+            if create_model_package is None or upload_to_s3 is None or validate_model_artifacts is None:
+                raise RuntimeError("Packaging helpers not available; ensure scripts/package_model_artifacts.py is importable")
+
+            # Validate model artifacts
+            validate_model_artifacts(args.model_dir)
+
+            # Create package
+            out_dir = Path("./dist")
+            out_dir.mkdir(parents=True, exist_ok=True)
+            version = args.version or None
+            package_path = create_model_package(args.model_dir, out_dir, version or "auto")
+
+            # Upload (dry-run unless --apply)
+            upload_to_s3(
+                package_path,
+                config.model_dump(),
+                args.version or "auto",
+                dry_run=dry_run,
+            )
 
         # Check budget guardrails (unless skipped)
         if not args.skip_budget_check:

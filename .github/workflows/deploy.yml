@@ -1,0 +1,64 @@
+name: Deploy (manual, protected)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options: ['dev', 'staging', 'prod']
+      apply:
+        description: 'If true, attempt to run apply steps (requires confirm_deploy)'
+        required: false
+        default: 'false'
+      confirm_deploy:
+        description: 'Type I_ACCEPT_COSTS to allow a real deploy'
+        required: false
+        default: ''
+
+jobs:
+  deploy:
+    name: Manual deploy (dry-run by default)
+    runs-on: ubuntu-latest
+    # Use a protected environment to require repository admins to configure approvals
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+          poetry config virtualenvs.create false
+          poetry install --no-interaction
+
+      - name: Package (dry-run)
+        run: |
+          echo "Running packaging dry-run for environment: ${{ github.event.inputs.environment }}"
+          poetry run python scripts/package_model_artifacts.py ./examples/dummy_model --environment "${{ github.event.inputs.environment }}"
+
+      - name: CDK synth (smoke)
+        run: |
+          echo "CDK synth smoke test"
+          python -c "from aws_cdk import App; from infra.security_detector_stack import SecurityDetectorStack; App(); print('synth smoke ok')"
+
+      - name: Apply guard check
+        run: |
+          echo "apply=${{ github.event.inputs.apply }} confirm='${{ github.event.inputs.confirm_deploy }}'"
+          if [ "${{ github.event.inputs.apply }}" != "true" ]; then
+            echo "Not applying: workflow ran in dry-run mode. To perform a deploy, re-run with apply=true and confirm_deploy=I_ACCEPT_COSTS"
+            exit 0
+          fi
+          if [ "${{ github.event.inputs.confirm_deploy }}" != "I_ACCEPT_COSTS" ]; then
+            echo "Missing explicit confirmation. To apply a real deploy, set confirm_deploy=I_ACCEPT_COSTS"
+            exit 1
+          fi
+          echo "Apply requested and confirmation provided. THIS WORKFLOW WILL NOT PERFORM THE REAL DEPLOY BY DEFAULT. Configure deploy steps or run from a protected environment."

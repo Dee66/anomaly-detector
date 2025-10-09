@@ -12,7 +12,7 @@ Config options (place under `s3` in your environment YAML):
   - Forwarded to `boto3.s3.transfer.TransferConfig` when a multipart upload path is used.
   - Common options:
     - max_concurrency: int (default: 10 in production recommended)
-    - multipart_chunksize: int (bytes) — size of each part
+    - multipart_chunksize: int (bytes) - size of each part
 
 Example (YAML):
 
