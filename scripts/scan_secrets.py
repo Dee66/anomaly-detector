@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Dict, List
 
 
-IGNORE_DIRS = {".git", "node_modules", ".venv", "venv", "__pycache__", ".pytest_cache"}
+IGNORE_DIRS = {".git", "node_modules", ".venv", "venv", "env", "__pycache__", ".pytest_cache"}
 IGNORE_FILES = {"poetry.lock"}  # lockfiles contain long hashes we don't want to flag
 
 
@@ -92,8 +92,22 @@ def scan_file(path: Path) -> List[Dict]:
 def walk_and_scan(root: Path) -> List[Dict]:
     findings = []
     for dirpath, dirnames, filenames in os.walk(root):
-        # mutate dirnames in-place to skip directories
-        dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS]
+        # mutate dirnames in-place to skip directories. Be conservative about virtualenvs
+        new_dirnames = []
+        for d in dirnames:
+            if d in IGNORE_DIRS:
+                continue
+            # skip common venv/virtualenv dirs by name
+            if d.startswith("venv") or d.startswith(".venv") or d.startswith("env"):
+                continue
+            full = Path(dirpath) / d
+            # skip directories that look like Python virtual environments
+            if (full / "pyvenv.cfg").exists():
+                continue
+            if (full / "bin" / "activate").exists() or (full / "Scripts" / "activate.bat").exists():
+                continue
+            new_dirnames.append(d)
+        dirnames[:] = new_dirnames
         for fname in filenames:
             if fname.startswith("."):
                 # allow hidden dotfiles but skip git internals already ignored
