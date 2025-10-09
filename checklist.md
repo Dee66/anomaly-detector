@@ -1,6 +1,6 @@
  # Access Anomaly Detector - Delivery Checklist
 
-<div align="left" style="margin:1rem 0;"> <strong>Status:</strong> <span>91% complete (51/56 items)</span> <div style="display:flex; align-items:center; gap:0.75rem; margin-top:0.35rem;"> <div style="flex:1; height:14px; background:#1f2933; border-radius:999px; overflow:hidden;"> <div style="width:91%; height:100%; background:linear-gradient(90deg, #10b981, #22d3ee);"></div> </div> <code style="background:#0f172a; color:#ecfeff; padding:0.1rem 0.55rem; border-radius:999px; font-weight:600;">91%</code> </div> </div>
+ <div align="left" style="margin:1rem 0;"> <strong>Status:</strong> <span>93% complete (52/56 items)</span> <div style="display:flex; align-items:center; gap:0.75rem; margin-top:0.35rem;"> <div style="flex:1; height:14px; background:#1f2933; border-radius:999px; overflow:hidden;"> <div style="width:93%; height:100%; background:linear-gradient(90deg, #10b981, #22d3ee);"></div> </div> <code style="background:#0f172a; color:#ecfeff; padding:0.1rem 0.55rem; border-radius:999px; font-weight:600;">93%</code> </div> </div>
 
 ## 1. Environment & Tooling 🛠️
 - ✅ Confirm Python 3.11 toolchain installed locally
@@ -62,6 +62,8 @@
  - ✅ Add unit tests that verify packaging enforces CMK usage and positive path for explicit KMS ARNs.
  - ✅ Add CDK infra unit tests for private-only VPC enforcement and audit DynamoDB table presence/condition.
 
+ - ✅ Hardened Permission Boundary to reference specific S3/KMS/SNS ARNs (scoped managed policy) and added a unit test verifying the boundary is not wildcarded.
+
 **Current Status**: 204 tests passing, comprehensive test coverage achieved with validated anomaly scoring, schema validation, log generator testing, entity extraction, S3/local ingestion pipeline, and real-time enrichment handlers. Deployment guard (double-confirmation) and additional unit tests added; CI workflow created.
 
 ## 6. Real-Time Enrichment Handler 🚨
@@ -83,6 +85,8 @@
 - [ ] Tag every resource (App, Env, CostCenter) for audit and FinOps.
  - ✅ Add CloudWatch alarms for invocation errors and log volume anomalies.
 	 - ✅ Wire alarm actions to `alerts.sns_topic_name` (SNS publish)
+
+ - ✅ Hardened permission boundary: created a managed policy scoped to the stack's buckets, KMS key, and SNS topic and attached it as a PermissionsBoundary on the service role (CfnRole override). Added template test asserting the managed policy references tokenized ARNs (not '*').
 
 **CDK notes & best-practices from Resource Forecaster:**
 - [ ] Parameterize infra via the central config (allow passing `model_bucket_name`, `data_bucket_name`, and `vpc_id` into the stack constructor).
