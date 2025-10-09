@@ -1,0 +1,61 @@
+name: PaS Cost Guard
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  estimate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+          poetry install
+
+      - name: Run PaS estimator on PR branch
+        id: pr_estimate
+        run: |
+          python tools/pas_estimate.py > pr_estimate.json
+          cat pr_estimate.json
+          echo "pr=$(cat pr_estimate.json)" >> $GITHUB_OUTPUT
+
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Install deps for main
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry
+          poetry install
+
+      - name: Run PaS estimator on main
+        id: main_estimate
+        run: |
+          python tools/pas_estimate.py > main_estimate.json
+          cat main_estimate.json
+          echo "main=$(cat main_estimate.json)" >> $GITHUB_OUTPUT
+
+      - name: Compare estimates and comment on PR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python tools/pas_ci_compare.py
